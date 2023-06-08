@@ -11,7 +11,7 @@
     "com.unity.ugui": "1.0.0",
     "com.unity.xr.hands": "1.1.0",
     "com.unity.xr.interaction.toolkit": "2.3.2",
-    "com.unity.xr.picoxr": "file:D:/development/SharePackage/PICO Unity Integration SDK v211",
+    "com.unity.xr.picoxr": "file:../PICO Unity IntegrationSDK-214",
     "com.unity.modules.ai": "1.0.0",
     "com.unity.modules.androidjni": "1.0.0",
     "com.unity.modules.animation": "1.0.0",

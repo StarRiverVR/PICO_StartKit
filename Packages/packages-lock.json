@@ -73,6 +73,14 @@
       "dependencies": {},
       "url": "https://packages.unity.cn"
     },
+    "com.unity.pico.livepreview": {
+      "version": "file:PICO Unity Live Preview Plugin (Experiment)",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.xr.management": "4.0.0"
+      }
+    },
     "com.unity.render-pipelines.core": {
       "version": "12.1.11",
       "depth": 1,
@@ -231,7 +239,7 @@
       "url": "https://packages.unity.cn"
     },
     "com.unity.xr.picoxr": {
-      "version": "file:D:/development/SharePackage/PICO Unity Integration SDK v211",
+      "version": "file:../PICO Unity IntegrationSDK-214",
       "depth": 0,
       "source": "local",
       "dependencies": {
