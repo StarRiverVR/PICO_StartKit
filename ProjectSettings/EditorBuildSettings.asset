@@ -6,7 +6,7 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 0
-    path: Assets/Scenes/New Scene.unity
+    path: Assets/Scenes/TestScene.unity
     guid: 0792818494502ac41bd3410ca3ebcf39
   - enabled: 0
     path: Assets/Samples/XR Interaction Toolkit/2.3.2/Hands Interaction Demo/Runtime/HandsDemoScene.unity
