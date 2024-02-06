@@ -27,26 +27,28 @@ public class GunComponent : MonoBehaviour
         triggerActionReference.action.started -= OnTriggerPressed;
     }
 
-    private void OnTriggerPressed(InputAction.CallbackContext context)
-    {
-        MessageCenter.SendMessage(MessageTypes.ShowMessage, "Trigger button was pressed.");
+    public void ShootBullet(){
+          MessageCenter.SendMessage(MessageTypes.ShowMessage, "Trigger button was pressed.");
         var bullet = Instantiate(this.Bullet);
         var startPosition = this.transform.parent.Find("[Right Controller] Attach").transform.position;
       
         bullet.transform.position = startPosition;
       
         bullet.GetComponent<Rigidbody>().velocity = this.transform.forward * 6f;
-
-
-     
-
         //bullet.transform.SetParent(this.transform.root);
         bullet.SetActive(true);
 
 
         // Trigger按钮被按下时执行的代码
         Debug.Log("Trigger button was pressed.");
-        // 在这里添加你的逻辑
+    }
+
+    private void OnTriggerPressed(InputAction.CallbackContext context)
+    {
+        this.ShootBullet();
+        Debug.Log(GameObject.Find("ReferencePoint").transform.forward);
+        
+
     }
 
     //public XRIDefaultInputActions _inputActions;

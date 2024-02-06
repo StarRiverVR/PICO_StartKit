@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   useContentProtect: 0
   handTracking: 0
-  openMRC: 1
+  openMRC: 0
   faceTracking: 0
   lipsyncTracking: 0
   eyeTracking: 0

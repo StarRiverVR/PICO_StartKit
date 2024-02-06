@@ -5,6 +5,10 @@ using UnityEngine;
 using Unity.XR;
 using UnityEngine.XR;
 using TMPro;
+//using UnityEngine.InputSystem;
+
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.EventSystems;
 
 using LightBand;
 
@@ -12,6 +16,8 @@ using LightBand;
 
 public class MoveController : MonoBehaviour
 {
+    public UnityEngine.InputSystem.InputActionReference grabActionReference;
+
     private bool IsAttaching = false;
 
     private Vector3 defaultPostion;
@@ -115,8 +121,7 @@ public class MoveController : MonoBehaviour
             {
                 if (triggerValue)
                 {
-                    this.controlMode.Move(this.controlMode.Direction, this.Origin);
-
+                    this.controlMode.Move(this.gameObject, this.transform.parent.Find("ReferencePoint").gameObject, this.Origin);
                 }
                 else
                 {

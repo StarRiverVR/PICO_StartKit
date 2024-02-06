@@ -443,7 +443,7 @@ GameObject:
   - component: {fileID: 636390949}
   - component: {fileID: 636390948}
   m_Layer: 0
-  m_Name: Cube
+  m_Name: ReferencePoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -955,6 +955,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 718af069ae2e148c6b597853165dce06, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  grabActionReference: {fileID: 0}
 --- !u!54 &1023663045
 Rigidbody:
   m_ObjectHideFlags: 0
