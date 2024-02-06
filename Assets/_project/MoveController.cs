@@ -86,8 +86,9 @@ public class MoveController : MonoBehaviour
 
     private void Reset()
     {
-        
-        this.direction = Vector3.zero;
+
+        this.controlMode.Direction = Vector3.zero;
+    
         this.IsAttaching = false;
         //this.transform.parent.SetParent(this.transform.root);
         this.transform.localPosition = Vector3.zero;
@@ -103,9 +104,31 @@ public class MoveController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        bool triggerValue;
+   
+
         if (this.IsAttaching) {
-            this.controlMode.Move(this.controlMode.Direction, this.Origin);
+            
             //this.Origin.transform.position += this.direction.normalized * 0.003f;
+
+            if (leftHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.gripButton, out triggerValue) && triggerValue)
+            {
+                if (triggerValue)
+                {
+                    this.controlMode.Move(this.controlMode.Direction, this.Origin);
+
+                }
+                else
+                {
+                    this.IsAttaching = false;
+                    this.Reset();
+                }
+          
+            }
+        }
+        else
+        {
+            this.Reset();
         }
     }
 }

@@ -8,6 +8,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 0
+    path: Assets/Samples/XR Interaction Toolkit/2.4.0/Starter Assets/DemoScene.unity
+    guid: 319dafa5c80f29f428dc1e0d03f04177
   m_configObjects:
     Unity.XR.PXR.Settings: {fileID: 11400000, guid: d6ede9df34e7145d49e46fff0419da60,
       type: 2}
