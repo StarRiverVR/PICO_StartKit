@@ -56,7 +56,7 @@ public class Mode1: ControlModelBase
         a1.y = 0;
         var a2 = referencePoint.transform.forward;
 
-        var direction = a1.Rotate(gameObject.transform.rotation.eulerAngles.y);
+        var direction = a1;
         var angle = Vector3.Angle(a1, a2);
         var cross = Vector3.Cross(a1, a2);
 
