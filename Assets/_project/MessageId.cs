@@ -12,11 +12,13 @@ using LightBand;
 
 public enum MessagegId
 {
-    ShowMessage
+    ShowMessage,
+    ControlModeUpdate
 }
 
 
 public static class MessageTypes
 {
     public static readonly MessageType<string> ShowMessage = new MessageType<string>(MessagegId.ShowMessage);
+    public static readonly MessageType<IControlMode> ControlModeUpdate= new MessageType<IControlMode>(MessagegId.ControlModeUpdate);
 }

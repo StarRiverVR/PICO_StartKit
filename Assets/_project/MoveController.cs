@@ -122,13 +122,14 @@ public class MoveController : MonoBehaviour
                 if (triggerValue)
                 {
                     this.controlMode.Move(this.gameObject, this.transform.parent.Find("ReferencePoint").gameObject, this.Origin);
+                    MessageCenter.SendMessage(MessageTypes.ControlModeUpdate, this.controlMode);
+                    this.ShowMessage(this.controlMode.State + "  " + this.controlMode.Multiplier);
                 }
                 else
                 {
                     this.IsAttaching = false;
                     this.Reset();
                 }
-          
             }
         }
         else

@@ -8,17 +8,38 @@ using TMPro;
 
 using LightBand;
 
+public enum ControlState
+{
+    none,
+    move_forward,
+    move_backward,
+    move_turn_left,
+    move_turn_right,
+    turn_left,
+    turn_right
+}
+
 public interface IControlMode {
     public bool IsAttaching { get; set; }
     public Vector3 Direction { get; set; }
     public void Diff(Vector3 currentPosition, Vector3 originalPosition);
     public void Move(GameObject controller, GameObject referencePoint, GameObject gameObject);
+    public ControlState State { get; set; }
+
+    // 代表了该模式下的倍数
+    public float Multiplier { get; set; }
+    
 }
 
 public class ControlModelBase:IControlMode
 {
     public bool IsAttaching { get; set; }
     public  Vector3 Direction { get; set; }
+    public ControlState State { get; set; }
+
+    // 代表了该模式下的值
+    public float Multiplier { get; set; }
+
     public void Diff(Vector3 currentPosition, Vector3 originalPosition) {
         this.Direction = currentPosition - originalPosition;
     }
@@ -36,24 +57,48 @@ public class Mode1: ControlModelBase
         var a2 = referencePoint.transform.forward;
 
         var direction = a1.Rotate(gameObject.transform.rotation.eulerAngles.y);
-
         var angle = Vector3.Angle(a1, a2);
+        var cross = Vector3.Cross(a1, a2);
 
-        if (angle < 35 || angle > 145) {
-            gameObject.transform.position += direction.normalized * 0.01f;
+        if (direction.magnitude < 0.03) {
+            this.State = ControlState.none;
+            return;
         }
-        else { 
-            var cross =  Vector3.Cross(a1, a2);
-            if (cross.y > 0) {
-                gameObject.transform.Rotate(gameObject.transform.up, - angle * 0.003f);
+        else if (direction.magnitude < 0.08) this.Multiplier = 1;
+        else if (direction.magnitude > 0.08) this.Multiplier = 2;
+
+        float positionChangeRate = 0;
+        float rotationChangeRate = 0;
+
+        if (angle < 35) {
+            this.State = ControlState.move_forward;
+            positionChangeRate = 0.01f;
+
+        }
+        else if(angle < 145)
+        {
+            if (cross.y > 0)
+            {
+                this.State = ControlState.move_turn_left;
+                rotationChangeRate = - 0.003f;
             }
             else
             {
-                gameObject.transform.Rotate(gameObject.transform.up,   angle * 0.003f);
+                this.State = ControlState.move_turn_right;
+                rotationChangeRate = 0.003f;
             }
+            positionChangeRate = 0.005f;
 
-            gameObject.transform.position += direction.normalized * 0.007f;
         }
+        else
+        {
+            this.State = ControlState.move_backward;
+            positionChangeRate = 0.006f;
+
+        }
+
+        gameObject.transform.position += direction.normalized * positionChangeRate * this.Multiplier;
+        gameObject.transform.Rotate(gameObject.transform.up, angle * rotationChangeRate * this.Multiplier);
     }
 
 }
