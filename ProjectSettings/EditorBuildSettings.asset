@@ -5,9 +5,15 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 0
+    path: Assets/Scenes/SingleHand Control Mode.unity
+    guid: 9d694b252d9df46e99a25d99e288f5ee
+  - enabled: 1
+    path: Assets/Scenes/Head Control Mode.unity
+    guid: 71dbb0a87122545e08846fcbc98cd2d9
   m_configObjects:
     Unity.XR.PXR.Settings: {fileID: 11400000, guid: 75598daa28c2643c3b51b8d53001508a,
       type: 2}

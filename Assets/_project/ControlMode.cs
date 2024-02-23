@@ -8,6 +8,8 @@ using TMPro;
 
 using LightBand;
 
+
+
 public enum ControlState
 {
     none,
@@ -106,7 +108,53 @@ public class Mode1: ControlModelBase
 // 使用头部进行移动和转向
 public class Mode2 : ControlModelBase
 {
-  
+    public override void Move(GameObject controller, GameObject referencePoint, GameObject gameObject)
+    {
+        var direction = controller.transform.position - referencePoint.transform.position;
+        direction.y = 0;
+
+        var a1 = controller.transform.up;
+        var a2 = referencePoint.transform.forward;
+
+        var angle = Vector3.Angle(a1, a2);
+        var cross = Vector3.Cross(a1, a2);
+
+        if (direction.magnitude < 0.08)
+        {
+            this.State = ControlState.none;
+            return;
+        }
+        else if (direction.magnitude < 0.12) this.Multiplier = 1;
+        else if (direction.magnitude > 0.12) this.Multiplier = 2;
+
+        float positionChangeRate = 0;
+        float rotationChangeRate = 0;
+
+        if (Vector3.Project(direction, referencePoint.transform.right).magnitude < 0.08 || angle < 10)
+        {
+            this.State = ControlState.move_forward;
+            positionChangeRate = 0.01f;
+
+        }
+        else
+        {
+            if (cross.y > 0)
+            {
+                this.State = ControlState.move_turn_left;
+                rotationChangeRate = -0.003f;
+            }
+            else
+            {
+                this.State = ControlState.move_turn_right;
+                rotationChangeRate = 0.003f;
+            }
+            positionChangeRate = 0.005f;
+
+        }
+
+        gameObject.transform.position += direction.normalized * positionChangeRate * this.Multiplier;
+        gameObject.transform.Rotate(gameObject.transform.up, angle * rotationChangeRate * this.Multiplier);
+    }
 
 }
 

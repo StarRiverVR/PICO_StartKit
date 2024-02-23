@@ -7,34 +7,26 @@ using UnityEngine.XR;
 using TMPro;
 //using UnityEngine.InputSystem;
 
-using UnityEngine.XR.Interaction.Toolkit;
-using UnityEngine.EventSystems;
-
 using LightBand;
 
 
 
-public class MoveController : MonoBehaviour
+public class MoveController : ControlModeBaseBehaviour
 {
     public UnityEngine.InputSystem.InputActionReference grabActionReference;
 
     private bool IsAttaching = false;
 
-    private Vector3 defaultPostion;
-
-    private GameObject relativeDefaultPosition;
  
     private Vector3 direction;
     private List<InputDevice> inputDevices = new List<InputDevice>();
     private InputDevice leftHandDevice;
 
-    private IControlMode controlMode = new Mode1();
-
-    private GameObject Origin;
 
     // Start is called before the first frame update
     void Start()
     {
+        this.controlMode = new Mode1();
         this.Origin = GameObject.Find("XR Origin");
         this.transform.parent.SetParent(this.Origin.transform);
 
@@ -101,10 +93,7 @@ public class MoveController : MonoBehaviour
 
     }
 
-    private void ShowMessage(string msg)
-    {
-        MessageCenter.SendMessage(MessageTypes.ShowMessage, msg);
-    }
+  
 
 
     // Update is called once per frame
