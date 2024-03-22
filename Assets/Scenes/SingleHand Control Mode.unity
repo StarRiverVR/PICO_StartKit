@@ -333,6 +333,50 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 169514943}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &174865660
+GameObject:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 174865662}
+  - component: {fileID: 174865661}
+  m_Layer: 0
+  m_Name: com.vivo.codelibrary.MonoUpdateManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &174865661
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 174865660}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8f1d0bf903dab248a4adde6d6aa0e97, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &174865662
+Transform:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 174865660}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &230539611
 GameObject:
   m_ObjectHideFlags: 0
@@ -678,7 +722,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   triggerActionReference: {fileID: -5982496924579745919, guid: c348712bda248c246b8c49b3db54643f,
     type: 3}
-  OriginGameObject: {fileID: 638635827}
+  Origin: {fileID: 0}
+  ReferenceGameObject: {fileID: 0}
+  spawnManagerValues: {fileID: 0}
 --- !u!1 &446611696
 GameObject:
   m_ObjectHideFlags: 0
@@ -1101,6 +1147,7 @@ GameObject:
   - component: {fileID: 638635830}
   - component: {fileID: 638635829}
   - component: {fileID: 638635828}
+  - component: {fileID: 638635831}
   m_Layer: 0
   m_Name: XR Origin
   m_TagString: Untagged
@@ -1155,6 +1202,23 @@ Transform:
   - {fileID: 622536580}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &638635831
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 638635827}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a81e3e2842beba41accc6431ac44e13, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  MainCamera: {fileID: 1338860392}
+  configAsset: {fileID: 11400000, guid: 7c3c8255d305d324584b6651f1de91ee, type: 2}
+  eyeTracking: 0
+  foveationLevel: 0
+  useFoveationDynamic: 0
 --- !u!1 &690752013
 GameObject:
   m_ObjectHideFlags: 0
@@ -1780,6 +1844,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 718af069ae2e148c6b597853165dce06, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  triggerActionReference: {fileID: 0}
+  Origin: {fileID: 0}
+  ReferenceGameObject: {fileID: 0}
   grabActionReference: {fileID: -3742484312079769484, guid: c348712bda248c246b8c49b3db54643f,
     type: 3}
 --- !u!54 &1023663045
@@ -4381,3 +4448,4 @@ SceneRoots:
   - {fileID: 429000467}
   - {fileID: 697662934}
   - {fileID: 2027310551}
+  - {fileID: 174865662}

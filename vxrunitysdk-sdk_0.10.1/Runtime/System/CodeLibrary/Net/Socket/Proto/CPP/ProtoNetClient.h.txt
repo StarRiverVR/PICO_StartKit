@@ -1,0 +1,55 @@
+
+#pragma once
+#include "stdafx.h"
+#include "proto.h"
+/*
+异步网络客户端
+*/
+#include <iostream>
+#include <string>
+using namespace std;
+/*
+boost asio网络库
+*/
+#include<boost/asio.hpp>
+#include<boost/thread.hpp>
+#include<boost/asio/error.hpp>
+#define BOOST_THREAD_USE_LIB
+using namespace boost::asio;
+using namespace Proto;
+
+enum {
+	client_buf_max = 2048, //每个客户端缓存上限
+};
+
+typedef boost::shared_ptr<ip::tcp::socket> socket_ptr;
+
+//客户端只会保持一个线程在跑
+//用法 在ProtoNetClient的实例中调用Start();
+class ProtoNetClient {
+public:
+	string username = "username01";
+	string password = "password01";
+	static string url;
+	static int32_t port;
+	void Start();
+	static void SendMillisec_Static(ProtoNetClient* io, char* p, int size, int waitMillisec);//延迟发送 毫秒
+	static void Send_Static(ProtoNetClient* io, char* p, int size);//立刻发送
+	static void Ping(ProtoNetClient* io);//向服务端ping
+	static void Send_CallBack(ProtoNetClient* io,const boost::system::error_code& err);//异步发送完后的反馈
+private:
+	io_service client;
+	socket_ptr socket;
+	boost::asio::deadline_timer* timer;//定时器
+	boost::asio::deadline_timer* timer_ping;//ping定时器
+	boost::asio::deadline_timer* timer_reset_connect;//StartCallBack定时器
+	static void StartCallBack(ProtoNetClient* io,const boost::system::error_code& err);//连接到服务器的反馈
+	static void ResetConnect(ProtoNetClient* io);//重新连接
+	static void On_Read(ProtoNetClient* io,char* p, const boost::system::error_code& err, size_t s);//读取数据操作
+	//
+	vector<char*> disposeReadDatas;//等待处理的客户端消息(空闲数据池)
+	char* GetDisposeReadDataSave();//获得空闲数据
+	void PutBackDisposeReadDataSave(char* p);//将数据放入池子
+protected:
+
+};

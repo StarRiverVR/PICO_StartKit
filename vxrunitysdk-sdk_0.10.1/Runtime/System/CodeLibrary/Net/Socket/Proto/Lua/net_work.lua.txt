@@ -1,0 +1,106 @@
+
+-----------------------网络交互类,使用lua编译运行此文件可以看案例（函数运行Test()）-------------------------
+require("proto") --协议
+
+
+--根据协议处理网络数据(具体业务类) str:需要反序列化的字节数组 agreement:协议号 target_endian:接收服务端的大小端排序
+function ProcessDada(str,agreement,target_endian)
+	if(agreement==proto_enum.err) then--//错误码
+		local res_data=err_data.new();
+		res_data.Deserialize(str,res_data,target_endian);
+		print("错误码:",res_data.err_code);
+	elseif(agreement==proto_enum.agreement_login_c) then--//账号登录请求反馈
+		local res_data=account_login_c.new();
+		res_data.Deserialize(str,res_data,target_endian);
+		if( res_data.res==1 ) then
+			print("登录成功");
+		else
+			print("登录失败");
+		end
+	end
+end
+
+--序列化对象为网络数据 序列化的结果直接用于网络发送 val:要序列化的对象 agreement：使用的协议号
+function Serialize(val,agreement)
+	InitEndian();
+	local str="";
+	local size=0;
+	local size_e,str_e = val.Serialize(val);
+	str =int32ToBufStr(agreement,Endian) .. str_e;--根据大端小端进行端排序
+	size=size_e+4;
+	--头长度
+	local str_head = int32ToBufStr(size,Endian);--根据大端小端进行端排序
+	--返回序列化结果
+	size=size+4+2;
+	num_Endian =0;
+	if( Endian == 1 ) then
+		num_Endian = 257;
+	else
+		num_Endian = 0;
+	end
+	str = int16ToBufStr(num_Endian,Endian)..str_head..str;--写入大端小端标记 根据大端小端进行端排序
+	return size,str;
+end
+
+--将数据发送给服务端 send_data:要发送的结构体 agreement：要发送的协议号
+function Send(send_data,agreement)
+	local size,send_bytes=Serialize(send_data,agreement);
+	--下一步是将send_bytes发送出去
+	--
+end
+
+--处理网络数据包(包裹拆分处理,直接传入网络字节数据和收到的数据长度即可)  --data:(字节字符串,c#可以直接传byte[])接收到的网络包 --data_len:接收的网络数据总长度 
+function Split_The_Parcel(data, data_len)
+	InitEndian();
+	--获取消息头 数据总长度
+	local index=1;
+	while( index<data_len ) do
+		--解析大端小端标记
+		local endian_num1,endian_num2 = string.byte(data,index,index+2);
+		local t_Endian=bufToInt16(endian_num1,endian_num2,Endian);
+		if( t_Endian ~= 257 and t_Endian ~= 0) then
+			print("数据切分错误，端排序解析错误!");
+			break;
+		end
+		local te=0;
+		if(t_Endian==257) then
+			te=1;--小端
+		else
+			te=2;--大端
+		end
+		index=index+2;
+		local num1, num2, num3, num4 = string.byte(data,index,index+4);
+		local packe_len = bufToInt32(num1,num2,num3,num4,te);--一个数据包长度 根据接收端的段排序进行解析
+		index=index+4;
+		num1, num2, num3, num4 = string.byte(data,index,index+4);
+		agreement = bufToInt32(num1, num2, num3, num4,te);--协议号  根据接收端的段排序进行解析
+		local str = string.sub(data,index+4,index+packe_len-1);
+		--处理解析数据
+		ProcessDada(str,agreement,te);
+		index = index+packe_len;
+	end
+end
+
+--登录请求
+function LogIn(username,password)
+	local sd=account_login.new();
+	sd.username=username;
+	sd.password=password;
+	Send(sd,proto_enum.agreement_login);
+end
+
+--ping请求 需要定时发送(没隔1秒钟发送一次)
+function Ping()
+	local sd=ping_data.new();
+	Send(sd,proto_enum.ping);
+end
+
+--测试函数
+function Test()
+	print("这是打印错误码测试:");
+	target_data=err_data.new();
+	target_data.err_code=121;
+	x_size,x_str=Serialize(target_data,2);--将目标数据序列化成网络传送byte数据
+	Split_The_Parcel(x_str,x_size);--将网络传送的byte数据进行拆包解析
+end
+Test();

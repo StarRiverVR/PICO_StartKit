@@ -1,0 +1,78 @@
+{
+  "name": "com.vivo.xr.unityplugin",
+  "displayName": "Vivo XR Plugin",
+  "version": "0.10.1",
+  "unity": "2021.3",
+  "description": "Provides display and input support for Vivo devices.",
+  "keywords": [
+    "vivoxr",
+    "openxr",
+    "xr",
+    "reality",
+    "xreditorsubsystem"
+  ],
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "12.0.0",
+    "com.unity.inputsystem": "1.4.3",
+    "com.unity.modules.xr": "1.0.0",
+    "com.unity.xr.core-utils": "2.0.0",
+    "com.unity.xr.management": "4.0.1",
+    "com.unity.xr.openxr": "1.7.0",
+    "com.unity.nuget.newtonsoft-json": "3.1.0"
+  },
+  "samples": [
+ 
+    {
+      "displayName": "Common Assets",
+      "description": "公用资源",
+      "path": "Samples~/AssetsCommon"
+    },
+    {
+      "displayName": "EyeTracking Sample",
+      "description": "眼动追踪",
+      "path": "Samples~/EyeTracking"
+    },
+    {
+      "displayName": "FoveatedReadering(OpenGL Sample)",
+      "description": "静态注视点 OpenGL",
+      "path": "Samples~/FFR"
+    },
+    {
+      "displayName": "PassThrough Sample",
+      "description": "Sample scene and other assets for Passthrough.",
+      "path": "Samples~/PassThroughDemo"
+    },
+    {
+      "displayName": "XRManager Sample",
+      "description": "MSAA,FadeInOut,LateLatching,ViewportScale.",
+      "path": "Samples~/XRManagerSamples"
+    },
+	  {
+      "displayName": "Overlay Sample",
+      "description": "合成层演示示例",
+      "path": "Samples~/OverlayDemo"
+    },
+	  {
+      "displayName": "OverlayVideo Sample",
+      "description": "合成层Android纹理视频播放示例",
+      "path": "Samples~/OverlayVideoDemo"
+    },
+    {
+      "displayName": "CrownEvent Sample",
+      "description": "表冠事件样例",
+      "path": "Samples~/CrownEventDemo"
+    },
+    {
+      "displayName": "SpatialAudio Sample",
+      "description": "空间音频样例",
+      "path": "Samples~/SpatialAudioDemo"
+    },
+    {
+      "displayName": "VirtualKeyboard Sample",
+      "description": "虚拟键盘样例",
+      "path": "Samples~/VirtualKeyboardDemo"
+    }	
+	
+	
+  ]
+}

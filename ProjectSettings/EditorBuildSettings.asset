@@ -11,11 +11,28 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/SingleHand Control Mode.unity
     guid: 9d694b252d9df46e99a25d99e288f5ee
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/Head Control Mode.unity
     guid: 71dbb0a87122545e08846fcbc98cd2d9
+  - enabled: 1
+    path: Assets/Samples/Vivo XR Plugin/0.10.1/XRManager Sample/main.unity
+    guid: 3e3cc33c01e8ceb47b6183227b822add
+  - enabled: 1
+    path: Assets/Samples/Vivo XR Plugin/0.10.1/XRManager Sample/FadeInOut/fadeInOut.unity
+    guid: bce6fba6969589349beb2036a107b0de
+  - enabled: 1
+    path: Assets/Samples/Vivo XR Plugin/0.10.1/XRManager Sample/LateLatching/lateLatching.unity
+    guid: 49d0c202894a20f4a8ce07f13754aa63
+  - enabled: 1
+    path: Assets/Samples/Vivo XR Plugin/0.10.1/XRManager Sample/MSAA/msaa.unity
+    guid: b84609d110510fa4fb2baf9aa83c19ee
+  - enabled: 1
+    path: Assets/Samples/Vivo XR Plugin/0.10.1/XRManager Sample/ViewportScale/viewportScale.unity
+    guid: 7940f236a894e6a4fb444b7a5647c63e
   m_configObjects:
     Unity.XR.PXR.Settings: {fileID: 11400000, guid: 75598daa28c2643c3b51b8d53001508a,
       type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: acc44e38f1a964a84bcba60ea29ff7b3,
+      type: 2}
+    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: a0dfd02e89c1a445aa19aa7a73b93b07,
       type: 2}

@@ -1,0 +1,775 @@
+
+#pragma once
+#include "stdafx.h" 
+#include <iostream>
+#include <string>
+#include <vector>
+
+using namespace std;
+namespace Proto {
+	/*
+	协议操作错误类型
+	*/
+	enum {
+		proto_err_nullptr = 1,//空指针错误
+		proto_err_data_lenght = 2,//数据长度错误
+		proto_err_endian = 3,//端序解析错误
+		proto_err_data = 4,//数据错误
+		proto_err_minus = 5,//正负号解析错误
+	};
+
+	/*
+	结构体网络数据切割结果
+	可根据协议号解析成对应的结构体
+	*/
+	struct Proto_Package_Data {
+		bool need_rev;//是否需要转序（处理大小端数据）
+		int32_t agreement;//协议号
+		int32_t lenght;//数据长度(用于查找确定解析时候的长度错误信息)
+		char* data;//数据(根据协议号进行下一步的数据反序列化 Proto_Package_Data.Deserialize())
+
+		/*
+		根据协议号转换成相应的数据
+		@res:返回是否成功反序列化
+		@err_info:反序列化失败的错误信息
+		*/
+		template<typename T> T Deserialize(bool& res, string& err_info) {
+			T t;
+			res = t.Deserialize(data , need_rev, lenght, err_info);
+			Free();
+			return t;
+		}
+		/*
+		释放申请的堆空间
+		数据使用完后必须进行释放
+		*/
+		void Free() {
+			if (data != 0) {
+				delete[] data;
+				data = 0;
+			}
+		}
+		Proto_Package_Data() {
+			data = 0;
+			need_rev = false;
+		}
+	};
+
+	/*
+	使用方法:
+	每次序列化一个结构体的时候,都需要创建一个新的ProtoTool对象,
+	在ProtoTool对象析构的时候会将Serialize()产生的堆进行释放
+
+	注意:每次序列化操作（Serialize()）都需要一个新的ProtoTool对象
+
+	作用:
+	1:将指定的协议结构体序列化成网络传输字节数组(Serialize())
+	2:将接收的网络数据进行包裹切分,并处理粘包情况,切割的结果可根据协议号获取对应的结构体(Split_The_Parcel())
+	3:将切割好的网络数据反序列化结构体(Proto_Package_Data.Deserialize)
+	4:可以指定要以何种端排序进行数据发送(Endian),当手动指定 Endian=SysEndian的时候,将以本机默认端序进行数据发送
+	5:根据接收的数据端序标识进行对应端序的数据解析
+	*/
+	class ProtoTool {
+	public:
+		/*
+		强制使用的端排列顺序 ,(向对方发送数据的时候将根据此设定进行重新数据排序)
+		可以与SysEndian配合使用,当 Endian=SysEndian的时候讲使用本机默认端排序进行数据发送
+		1:小端模式
+		2:大端模式
+		*/
+		static int16_t Endian;//
+		
+		/**
+		序列化一个结构
+		@t:要序列化的结构
+		@size:结构序列化之后的总数据字节数(包含头的长度)
+		@agreement:要序列化的协议号
+		@返回char* 数据长度(数据翻转,协议号长度+数据长度)+协议号+数据内容
+		*/
+		template<typename T> char* Serialize(T& t, int32_t& size, int32_t agreement) {
+			ProtoTool::InitEndian();
+			DeleteBuffer();
+			char* data = t.Serialize(size);
+			serialize_buffer = new char[size + head_len + agreement_len+sizeof(int16_t)];
+			char* p = serialize_buffer;
+			//写入大端小端区分标识 小端写入257,大端写入0
+			int16_t num_Endian = (ProtoTool::Endian == 1) ? 257 : 0;
+			if (ProtoTool::SysEndian== ProtoTool::Endian) {
+				memcpy(p, &num_Endian, sizeof(int16_t));
+			}else{//大端小端不匹配的时候进行翻转
+				memcpy(p, &num_Endian, sizeof(int16_t));
+				ProtoTool::Reversal(p, sizeof(int16_t));
+			}
+			p = p + sizeof(int16_t);
+			//写入数据长度
+			int32_t data_len = size + agreement_len;
+			if (ProtoTool::SysEndian == ProtoTool::Endian) {
+				memcpy(p, &data_len, head_len);
+			}
+			else {//大端小端不匹配的时候进行翻转
+				memcpy(p, &data_len, head_len);
+				ProtoTool::Reversal(p, head_len);
+			}
+			p = p + head_len;
+			//写入协议号
+			if (ProtoTool::SysEndian == ProtoTool::Endian) {
+				memcpy(p, &agreement, agreement_len);
+			}
+			else {//大端小端不匹配的时候进行翻转
+				memcpy(p, &agreement, agreement_len);
+				ProtoTool::Reversal(p, agreement_len);
+			}
+			p = p + agreement_len;
+			//写入数据
+			memcpy(p, data, size);//有序 不需要大小端判断
+			size = size + head_len + agreement_len+sizeof(int16_t);
+			return serialize_buffer;
+		}
+
+		/*
+		将数据包裹进行拆分
+		@data 网络数据
+		@len 网络数据的长度
+		@resoult 拆分后的结果
+		@err_info 错误描述
+		@返回错误码
+		*/
+		int32_t Split_The_Parcel(char* data, int32_t len, vector<Proto_Package_Data>& resoult, string& err_info) {
+			ProtoTool::InitEndian();
+			resoult.clear();
+			if (len<(head_len + agreement_len+sizeof(int16_t))) {
+				err_info = "网络数据包长度错误Line:141";
+				std::cout << err_info << endl;
+				return proto_err_data_lenght;
+			}
+			else if (data == NULL) {
+				err_info = "网络数据包为空Line:146";
+				std::cout << err_info << endl;
+				return proto_err_nullptr;
+			}
+			char* ar = new char[len];
+			memcpy(ar, data, len);
+			char* p = ar;
+			int32_t index = 0;
+			while (index<len)
+			{
+				int16_t tEndian= *((int32_t*)p);
+				if (tEndian!=257 && tEndian!=0) {
+					err_info = "网络数据解析错误, 大小端标记错误Line:158";
+					std::cout << err_info << endl;
+					delete[] ar;
+					return proto_err_endian;
+				}
+				int16_t te = (tEndian == 257) ? 1 : 2;
+				p = p + sizeof(int16_t);
+				index= index+ sizeof(int16_t);
+				if (ProtoTool::SysEndian != te) {//大端小端不匹配的时候进行翻转
+					ProtoTool::Reversal(p, sizeof(int32_t));
+				}
+				int32_t data_len = *((int32_t*)p);
+				if (data_len >(len - index - head_len) || data_len<=agreement_len) {
+					err_info = "网络数据包长度错误Line:171";
+					std::cout << err_info << endl;
+					delete[] ar;
+					return proto_err_data_lenght;
+				}
+
+				p = p + head_len;
+				index = index + head_len;
+				if (ProtoTool::SysEndian != te) {//大端小端不匹配的时候进行翻转
+					ProtoTool::Reversal(p, sizeof(int32_t));
+				}
+				int32_t agreement = *((int32_t*)p);//协议号
+				if (*(p + agreement_len) != '~') {
+					err_info = "网络数据解析数据错误Line:184";
+					std::cout << err_info << endl;
+					delete[] ar;
+					return proto_err_data;
+				}
+				Proto_Package_Data newData;
+				newData.agreement = agreement;
+				char* buf = new char[data_len - agreement_len];
+				memcpy(buf, p + agreement_len, data_len - agreement_len);
+				newData.data = buf;
+				newData.lenght = data_len - agreement_len;
+				p = p + data_len;
+				index = index + data_len;
+				newData.need_rev = (te == ProtoTool::SysEndian) ? false : true;
+				resoult.push_back(newData);
+			}
+			if (index != len) {
+				err_info = "网络数据包长度错误Line:201";
+				std::cout << err_info << endl;
+				delete[] ar;
+				return proto_err_data_lenght;
+			}
+			delete[] ar;
+			return 0;
+		}
+
+		ProtoTool() {
+			serialize_buffer = 0;
+			head_len = sizeof(int32_t);//头长度
+			agreement_len = sizeof(int32_t);//协议长度
+		}
+
+		~ProtoTool() {
+			DeleteBuffer();
+		}
+	public:
+		/*
+		当前系统默认端排列顺序
+		在程序运行时进行自动判定,不可以进行手动改变
+		1:小端模式 
+		2:大端模式
+		*/
+		static int16_t SysEndian;//
+		/*
+		当前系统默认端排列顺序
+		在程序运行时进行自动判定,不可以进行手动改变
+		*/
+		static void InitEndian();//
+
+		/*
+		翻转数组
+		@dir 要翻转的char数组
+		@len 数组长度
+		@会对传入的char* dir进行直接操作
+		*/
+		static void Reversal(char* dir, int32_t len) {
+			char* p = new char[len];
+			memcpy(p, dir, len);
+			char* ptr = p;
+			ptr = ptr + len - 1;
+			for (int i = 0; i < len; i++) {
+				dir[i] = *ptr;
+				ptr--;
+			}
+			delete[] p;
+		}
+
+		/**将一个字符串转换成语言通用(c++,cs)网络数据*/
+		static	char* get_string_buffer(string str, int32_t& size) {
+			char* send_buffer = 0;
+			char* p = (char*)str.c_str();
+			int32_t len = strlen(p);
+			send_buffer = new char[len + 6];
+			char* buffer = send_buffer;
+			*buffer = '~';
+			buffer++;
+			if (ProtoTool::SysEndian == ProtoTool::Endian) {
+				memcpy(buffer, &len, 4);
+			}
+			else {//大端小端不匹配的时候进行翻转
+				memcpy(buffer, &len, 4);
+				ProtoTool::Reversal(buffer, 4);
+			}
+			buffer = buffer + 4;
+			*buffer = '~';
+			buffer++;
+			memcpy(buffer, p, len);//有序的不需要判断大小端
+			size = len + 6;
+			return send_buffer;
+		}
+
+		/*数据转化收尾*/
+		static	char* get_finish(vector<char*>& buf, vector<char*>& delbuf, int32_t& size) {
+			char* 	data_buffer = new char[size + 2 + sizeof(int32_t)];
+			char* p = data_buffer;
+			*p = '~';
+			p++;
+			if (ProtoTool::SysEndian == ProtoTool::Endian) {
+				memcpy(p, &size, sizeof(int32_t));
+			}
+			else {//大端小端不匹配的时候进行翻转
+				memcpy(p, &size, sizeof(int32_t));
+				ProtoTool::Reversal(p, sizeof(int32_t));
+			}
+			p = p + sizeof(int32_t);
+			*p = '~';
+			p++;
+			vector<char*>::iterator it = buf.begin();
+			for (; it != buf.end(); ++it) {
+				char* v_p_f = *it;
+				v_p_f++;
+				int32_t p_s = 0;
+				if (ProtoTool::SysEndian != ProtoTool::Endian) {//大端小端不匹配的时候进行翻转
+					char rev[sizeof(int32_t)] = {};
+					memcpy(rev, v_p_f, sizeof(int32_t));
+					ProtoTool::Reversal(rev, sizeof(int32_t));
+					p_s = *((int32_t*)rev);
+				}
+				else {
+					p_s = *((int32_t*)v_p_f);
+				}
+				memcpy(p, *it, p_s + 2 + sizeof(int32_t));//有序的不需要进行大小端判断
+				p = p + p_s + 2 + sizeof(int32_t);
+			}
+			it = delbuf.begin();
+			for (; it != delbuf.end(); ++it) {
+				delete[] * it;
+			}
+			size = size + 2 + sizeof(int32_t);
+			return data_buffer;
+		}
+
+		/*根据数据长度获得整个结构体数据*/
+		static	char* update_init(char* p, int32_t& err_code, int32_t& allsize, bool need_rev) {
+			err_code = 0;
+			char* ptr = p;
+			if (*ptr != '~') {
+				//数据发生错误
+				std::cout << "初始化结构解析数据错误, 数据错误" << endl;
+				err_code = proto_err_data;
+				return 0;
+			}
+			else if (p == NULL) {
+				//数据发生错误
+				std::cout << "初始化结构解析数据错误, 空指针" << endl;
+				err_code = proto_err_nullptr;
+				return 0;
+			}
+			ptr++;
+			if (need_rev) {//大端小端不匹配的时候进行翻转
+				ProtoTool::Reversal(ptr, sizeof(int32_t));
+			}
+			int32_t* len_str = (int32_t*)ptr;
+			int32_t len = *len_str;
+			ptr = ptr + 4;
+			if (*ptr != '~') {
+				//数据发生错误
+				std::cout << "初始化结构解析数据错误, 数据错误" << endl;
+				err_code = proto_err_data;
+				return 0;
+			}
+			ptr++;
+			char* buf = new char[len];
+			memcpy(buf, ptr, len);
+			allsize = len;
+			return buf;
+		}
+		
+	private:
+		char* serialize_buffer;
+		int32_t head_len;//头长度
+		int32_t agreement_len;//协议长度
+		void DeleteBuffer() {
+			if (serialize_buffer != 0) {
+				delete[] serialize_buffer;
+			}
+		}
+	};
+
+	template<typename T> char* get_buffer_d(T f, int32_t& size) {
+		int16_t minus = (f > 0) ? 1 : -1;//正负判定
+		f = (minus>0) ? f : -f;
+		int32_t d_size = sizeof(T);
+		char* p_f = new char[d_size + 6 + 2];
+		char* p2_f = p_f;
+		*p2_f = '~';
+		int32_t len = d_size + 2;
+		p2_f++;
+		if (ProtoTool::SysEndian == ProtoTool::Endian) {
+			memcpy(p2_f, &len, sizeof(int32_t));
+		}
+		else {//大端小端不匹配的时候进行翻转
+			memcpy(p2_f, &len, sizeof(int32_t));
+			ProtoTool::Reversal(p2_f, sizeof(int32_t));
+		}
+		p2_f = p2_f + sizeof(int32_t);
+		*p2_f = '~';
+		p2_f++;
+		minus = (minus > 0) ? 1 : 0;
+		if (ProtoTool::SysEndian == ProtoTool::Endian) {
+			memcpy(p2_f, &minus, 2);//正负号标记
+		}
+		else {//大端小端不匹配的时候进行翻转
+			memcpy(p2_f, &minus, 2);//正负号标记
+			ProtoTool::Reversal(p2_f, 2);
+		}
+		p2_f = p2_f + 2;
+		if (ProtoTool::SysEndian == ProtoTool::Endian) {
+			memcpy(p2_f, &f, d_size);
+		}
+		else {//大端小端不匹配的时候进行翻转
+			memcpy(p2_f, &f, d_size);
+			ProtoTool::Reversal(p2_f, d_size);
+		}
+		size = d_size + 2 + sizeof(int32_t) + 2;
+		return p_f;
+	};
+
+	template<typename T> char* get_list_buffer_d(vector<T>& v, int32_t& size) {
+		int32_t ar_size = v.size();
+		int32_t d_size = sizeof(T);
+		char* buf = new char[2 + sizeof(int32_t) + (d_size + 2 + sizeof(int32_t) + 2)*ar_size];
+		int32_t d_len = (d_size + 2 + sizeof(int32_t) + 2)*ar_size;
+		char* buf2 = buf;
+		*buf2 = '^';
+		buf2++;
+		if (ProtoTool::SysEndian == ProtoTool::Endian) {
+			memcpy(buf2, &d_len, sizeof(int32_t));
+		}
+		else {//大端小端不匹配的时候进行翻转
+			memcpy(buf2, &d_len, sizeof(int32_t));
+			ProtoTool::Reversal(buf2, sizeof(int32_t));
+		}
+		buf2 = buf2 + sizeof(int32_t);
+		*buf2 = '^';
+		buf2++;
+		vector<T>::iterator it = v.begin();
+		for (; it != v.end(); ++it) {
+			int32_t s;
+			char* p = get_buffer_d<T>(*it, s);
+			memcpy(buf2, p, s);//有序的 不需要判断大小端 
+			buf2 = buf2 + s;
+			delete[] p;
+		}
+		size = 2 + sizeof(int32_t) + (d_size + 2 + sizeof(int32_t) + 2)*ar_size;
+		return buf;
+	}
+
+	template<typename T> char* get_list_buffer_self_data(vector<T>& v, int32_t& size) {
+		size = 0;
+		vector<char*> temporary_list;
+		vector<int32_t> size_list;
+		vector<T>::iterator it = v.begin();
+		for (; it != v.end(); ++it) {
+			int32_t s;
+			char* p = it->Serialize(s);
+			size = size + s;
+			temporary_list.push_back(p);
+			size_list.push_back(s);
+		}
+		char* buf = new char[2 + sizeof(int32_t) + size];
+		char* buf2 = buf;
+		*buf2 = '^';
+		buf2++;
+		if (ProtoTool::SysEndian == ProtoTool::Endian) {
+			memcpy(buf2, &size, sizeof(int32_t));
+		}
+		else {//大端小端不匹配的时候进行翻转
+			memcpy(buf2, &size, sizeof(int32_t));
+			ProtoTool::Reversal(buf2, sizeof(int32_t));
+		}
+		buf2 = buf2 + sizeof(int32_t);
+		*buf2 = '^';
+		buf2++;
+		vector<char*>::iterator temporary_list_p = temporary_list.begin();
+		vector<int32_t>::iterator size_list_p = size_list.begin();
+		it = v.begin();
+		for (; temporary_list_p != temporary_list.end();) {
+			memcpy(buf2, *temporary_list_p, *size_list_p);//有序的不需要排序
+			buf2 = buf2 + *size_list_p;
+			it->Delete_Send_Buffer();
+			it++;
+			temporary_list_p++;
+			size_list_p++;
+		}
+		size = 2 + sizeof(int32_t) + size;
+		return buf;
+	}
+
+	/*默认变量数据化*/
+	template<typename T> void get_val_default(vector<char*>& buf, vector<char*>& delbuf, T& t, int32_t& size) {
+		int32_t size_f = 0;
+		char* p_f = get_buffer_d<T>(t, size_f);
+		buf.push_back(p_f);
+		delbuf.push_back(p_f);
+		size = size + size_f;
+	}
+	/*默认变量列表数据化*/
+	template<typename T> void get_val_list_default(vector<char*>& buf, vector<char*>& delbuf, vector<T>& t, int32_t& size) {
+		int32_t size_f_s = 0;
+		char* p_f_s = get_list_buffer_d<T>(t, size_f_s);
+		buf.push_back(p_f_s);
+		delbuf.push_back(p_f_s);
+		size = size + size_f_s;
+	}
+	/*自定义变量数据化*/
+	template<typename T> void get_self_val_default(vector<char*>& buf, vector<char*>& delbuf, T& t, int32_t& size) {
+		int32_t size_str = 0;
+		char* p_str = t.Serialize(size_str);
+		buf.push_back(p_str);
+		size = size + size_str;
+	}
+	/*自定义变量列表数据化*/
+	template<typename T> void get_self_val_list_default(vector<char*>& buf, vector<char*>& delbuf, vector<T>& t, int32_t& size) {
+		int32_t size_strs = 0;
+		char* p_strs = get_list_buffer_self_data<T>(t, size_strs);
+		buf.push_back(p_strs);
+		delbuf.push_back(p_strs);
+		size = size + size_strs;
+	}
+	/*普通变量处理*/
+	template<typename T> char* val_pt_update(char* ptr, T& t, int32_t head, int32_t& allsize,bool need_rev,int32_t& err_code, string& err_info) {
+		err_code = 0;
+		if ((head + 2 + sizeof(T) + 2)>allsize) {
+			err_info = "普通变量处理解析错误,长度异常Line:508";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		else if (ptr == NULL) {
+			err_info = "普通变量处理解析错误,空指针Line:515";
+			std::cout << err_info << endl;
+			err_code = proto_err_nullptr;
+			throw(err_code);
+			return ptr;
+		}
+		else if (*ptr != '~' || *(ptr + head + 1) != '~') {
+			err_info = "普通变量处理解析错误Line:522";
+			std::cout << err_info << endl;
+			err_code = proto_err_data;
+			throw(err_code);
+			return ptr;
+		}
+
+		allsize = allsize - (head + 2 + sizeof(T) + 2);
+		if (allsize<0) {
+			err_info = "普通变量处理解析错误,长度异常Line:531";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+
+		ptr = ptr + head + 2;
+		//获取正负
+		if (need_rev) {//大端小端不匹配的时候进行翻转
+			ProtoTool::Reversal(ptr, sizeof(int16_t));
+		}
+		int16_t minus = *((int16_t*)ptr);
+		if (minus!=0 && minus!=1) {
+			err_info = "普通变量处理解析错误, 正负号解析Line:545";
+			std::cout << err_info << endl;
+			err_code = proto_err_minus;
+			throw(err_code);
+			return ptr;
+		}
+		minus = (minus > 0) ? 1 : -1;
+		ptr = ptr + 2;
+		if (need_rev) {//大端小端不匹配的时候进行翻转
+			ProtoTool::Reversal(ptr, sizeof(T));
+		}
+		t = (*((T*)ptr))*minus;//T
+		
+		ptr = ptr + sizeof(T);
+		return ptr;
+	}
+	/*普通变量列表处理*/
+	template<typename T> char* val_list_pt_update(char* ptr, vector<T>& t, int32_t head, int32_t& allsize, bool need_rev, int32_t& err_code, string& err_info) {
+		err_code = 0;
+		t.clear();
+		if ((head + 2)>allsize) {
+			err_info = "普通变量列表处理解析错误,长度异常Line:566";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		else if (ptr == NULL) {
+			err_info = "普通变量列表处理解析错误,空指针Line:573";
+			std::cout << err_info << endl;
+			err_code = proto_err_nullptr;
+			throw(err_code);
+			return ptr;
+		}
+		else if (*ptr != '^' || *(ptr + head + 1) != '^') {
+			err_info = "普通变量列表处理解析错误Line:580";
+			std::cout << err_info << endl;
+			err_code = proto_err_data;
+			throw(err_code);
+			return ptr;
+		}
+		ptr++;
+		if (need_rev) {//大端小端不匹配的时候进行翻转
+			ProtoTool::Reversal(ptr, sizeof(int32_t));
+		}
+		int32_t ar_size_intlist01 = *((int32_t*)ptr);//vector总字节大小
+		if ((head + 2 + ar_size_intlist01)>allsize || ar_size_intlist01<0) {
+			err_info = "普通变量列表处理解析错误,长度异常Line:592";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		ptr = ptr + 1 + head;//'^'之后
+		allsize = allsize - ar_size_intlist01- (head + 2);
+		if (allsize<0) {
+			err_info = "普通变量列表处理解析错误,长度异常Line:601";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		while (ar_size_intlist01>0)
+		{
+			ptr = ptr + head + 2;
+			if (need_rev) {//大端小端不匹配的时候进行翻转
+				ProtoTool::Reversal(ptr, sizeof(int16_t));
+			}
+			int16_t minus = *((int16_t*)ptr);
+			if (minus!=0 && minus!=1) {
+				err_info = "普通变量列表处理解析错误, 正负号解析Line:615";
+				std::cout << err_info << endl;
+				err_code = proto_err_minus;
+				throw(err_code);
+				return ptr;
+			}
+			minus = (minus > 0) ? 1 : -1;
+			ptr = ptr + 2;
+			if (need_rev) {//大端小端不匹配的时候进行翻转
+				ProtoTool::Reversal(ptr, sizeof(T));
+			}
+			T x = (*((T*)ptr))*minus;//T
+			ptr = ptr + sizeof(T);//T
+			ar_size_intlist01 = ar_size_intlist01 - head - 2 - sizeof(T) - 2;//T
+			t.push_back(x);
+		}
+		if (ar_size_intlist01!=0) {
+			err_info = "普通变量列表处理解析错误, 列表解析长度异常Line:632";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		return ptr;
+	}
+	/*自定义变量处理*/
+	template<typename T> char* val_self_pt_update(char* ptr, T& t, int32_t head, int32_t& allsize, bool need_rev, int32_t& err_code, string& err_info) {
+		err_code = 0;
+		if ((head + 2)>allsize) {
+			err_info = "自定义变量处理解析错误,长度异常Line:644";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		else if (ptr == NULL) {
+			err_info = "自定义变量处理解析错误,空指针Line:651";
+			std::cout << err_info << endl;
+			err_code = proto_err_nullptr;
+			throw(err_code);
+			return ptr;
+		}
+		else if (*ptr != '~' || *(ptr + head + 1) != '~') {
+			err_info = "自定义变量处理解析错误Line:658";
+			std::cout << err_info << endl;
+			err_code = proto_err_data;
+			throw(err_code);
+			return ptr;
+		}
+		int32_t size_str = 0;
+		if (need_rev) {//大端小端不匹配的时候进行翻转
+			char rev[sizeof(int32_t)] = {};
+			memcpy(rev, ptr + 1, sizeof(int32_t));
+			ProtoTool::Reversal(rev, sizeof(int32_t));
+			size_str = *((int32_t*)(rev));
+		}
+		else
+		{
+			size_str = *((int32_t*)(ptr + 1));
+		}
+		if ((head + 2 + size_str)>allsize || size_str<0) {
+			err_info = "自定义变量处理解析错误,长度异常Line:676";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		allsize = allsize - (size_str + 2 + head);
+		if (allsize<0) {
+			err_info = "自定义变量处理解析错误,长度异常Line:684";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		t.Deserialize(ptr, need_rev, size_str + 2 + head, err_info);
+		ptr = ptr + size_str + 2 + head;
+		return ptr;
+	}
+	/*自定义变量列表处理*/
+	template<typename T> char* val_self_list_pt_update(char* ptr, vector<T>& t, int32_t head, int32_t& allsize, bool need_rev, int32_t& err_code, string& err_info) {
+		err_code = 0;
+		if ((head + 2)>allsize) {
+			err_info = "自定义变量列表处理解析错误,长度异常Line:698";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		else if (ptr == NULL) {
+			err_info = "自定义变量列表处理解析错误,空指针Line:705";
+			std::cout << err_info << endl;
+			err_code = proto_err_nullptr;
+			throw(err_code);
+			return ptr;
+		}
+		else if ((*ptr) != '^' || *(ptr + head + 1) != '^') {
+			err_info = "自定义变量列表处理解析错误Line:712";
+			std::cout << err_info << endl;
+			err_code = proto_err_data;
+			throw(err_code);
+			return ptr;
+		}
+		t.clear();
+		ptr++;
+		if (need_rev) {//大端小端不匹配的时候进行翻转
+			ProtoTool::Reversal(ptr, sizeof(int32_t));
+		}
+		int32_t ar_size_strs = *((int32_t*)ptr);//vector总字节大小
+		if ((head + 2 + ar_size_strs)>allsize || ar_size_strs<0) {
+			err_info = "自定义变量列表处理解析错误,长度异常Line:725";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		ptr = ptr + 1 + head;//'^'之后
+		allsize = allsize - ar_size_strs;
+		allsize = allsize - (head + 2);
+		if (allsize<0) {
+			err_info = "自定义变量列表处理解析错误,长度异常Line:735";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		while (ar_size_strs>0)
+		{
+			int32_t size_self_c = 0;
+			if (need_rev) {//大端小端不匹配的时候进行翻转
+				char rev[sizeof(int32_t)] = {};
+				memcpy(rev, ptr + 1, sizeof(int32_t));
+				ProtoTool::Reversal(rev, sizeof(int32_t));
+				size_self_c = *((int32_t*)(rev));
+			}
+			else {
+				size_self_c = *((int32_t*)(ptr + 1));
+			}
+			if (size_self_c<0) {
+				err_info = "自定义变量列表处理解析错误Line:754";
+				std::cout << err_info << endl;
+				err_code = proto_err_data;
+				throw(err_code);
+				return ptr;
+			}
+			T newData;
+			newData.Deserialize(ptr, need_rev, size_self_c + 2 + head, err_info);
+			ptr = ptr + size_self_c + 2 + head;
+			ar_size_strs = ar_size_strs - size_self_c - 2 - head;
+			t.push_back(newData);
+		}
+		if (ar_size_strs!=0) {
+			err_info = "自定义变量列表处理解析错误,自定义数据列表长度异常Line:767";
+			std::cout << err_info << endl;
+			err_code = proto_err_data_lenght;
+			throw(err_code);
+			return ptr;
+		}
+		return ptr;
+	}
+}

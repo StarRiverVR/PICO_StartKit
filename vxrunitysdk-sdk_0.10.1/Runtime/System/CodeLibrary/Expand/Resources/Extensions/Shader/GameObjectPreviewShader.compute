@@ -1,0 +1,42 @@
+
+#pragma kernel CSMain
+#pragma kernel InitRT
+
+RWTexture2D<float4> InitResult;
+
+Texture2D<float4> InputTexture;
+uint TextureWidth;
+uint TextureHight;
+float4 BackColor;
+
+struct OutputData
+{
+    float4 color;
+};
+
+RWStructuredBuffer<OutputData> OutputBuffer;
+
+float3 ACESTonemap(float3 linearcolor)
+{
+	float a = 2.51f;
+	float b = 0.03f;
+	float c = 2.43f;
+	float d = 0.59f;
+	float e = 0.14f;
+	return saturate((linearcolor * (a * linearcolor + b)) / (linearcolor * (c * linearcolor + d) + e));
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    float4 color = InputTexture[id.xy];
+    color = lerp(BackColor, color, color.w);
+	color.xyz = ACESTonemap(color.xyz);
+    OutputBuffer[id.y * TextureWidth + id.x].color = color;
+}
+
+[numthreads(8, 8, 1)]
+void InitRT(uint3 id : SV_DispatchThreadID)
+{
+    InitResult[id.xy] = float4(0,0,0,0);
+}

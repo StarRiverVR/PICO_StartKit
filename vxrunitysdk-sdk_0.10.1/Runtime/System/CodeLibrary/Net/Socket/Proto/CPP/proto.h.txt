@@ -1,0 +1,403 @@
+
+#pragma once
+#include "stdafx.h" 
+#include <iostream>
+#include <string>
+#include <vector>
+#include "proto_tool.h" 
+
+/*
+关键属性
+ProtoTool::Endian //当前强制使用的端排序模式 (可与ProtoTool::SysEndian配合使用系统默认排序)
+ProtoTool.Serialize //将传入的协议结构序列化成网络传输的数据 (端序(2字节)|数据长度(4字节)|协议号(4字节)|数据字节)
+ProtoTool.Split_The_Parcel //将接收到的网络数据切割成若干Proto_Package_Data
+Proto_Package_Data.Deserialize() //将切割完的网络数据反序列化成对象
+通用数据序列化规则(int16_t,int32_t,int64_t,short,bool)->('~'+数据长度(4字节)+'~'+|+正负标记(2字节)+|+数据长度)
+数组规则('^'+数据长度(4字节)+'^'+|+数据)
+数组规则('^'+数据长度(4字节)+'^'+|+数据)
+*/
+using namespace std;
+namespace Proto {
+
+	enum {
+		Heart=1,//心跳
+		Debug_Log=2,//log日志
+		Debug_LogError=3,//log日志
+		Debug_LogWarning=4,//log日志
+	};
+
+	/*默认的string替换结构*/
+	struct MCustom_String {
+		string str;
+
+		MCustom_String() {
+			buffers = 0;
+			char c[1]{};
+			str = c;
+		}
+
+		~MCustom_String() {
+			Delete_Send_Buffer();
+		}
+
+		/*网络数据*/
+		char* buffers = 0;
+
+		/*删除网络数据*/
+		void Delete_Send_Buffer() {
+			if (buffers != 0) {
+				delete[] buffers;
+				buffers = 0;
+			}
+		}
+
+		/**
+		根据结构体获得网络数据,结构-》协议
+		将结构进行序列化
+		@char* 返回转换成的数据
+		@size 数据的长度
+		*/
+		char* Serialize(int32_t& size) {
+			try
+			{
+				Delete_Send_Buffer();
+				//生成代码
+				buffers = ProtoTool::get_string_buffer(str, size);
+				return buffers;
+			}
+			catch (const char* c)
+			{
+				cout << c << endl;
+			}
+			catch (...)
+			{
+
+			}
+		}
+
+		/**
+		根据char数组获取对应的数据,协议-》结构
+		将结构进行反序列化,并更新结构体的值
+		@成功返回true
+		@all_len 数据总长度
+		@err_info 错误描述
+		*/
+		bool Deserialize(char* p,bool need_rev,int32_t all_len,string& err_info) {
+			try
+			{
+				char* ptr = p;
+				if (*ptr != '~') {
+					err_info = "结构MCustom_String反序列化失败,数据错误";
+					std::cout << err_info << endl; return false;
+				}
+				ptr++;
+				int32_t len_str = 0;
+				if (need_rev) {//大端小端不匹配的时候进行翻转
+				    ProtoTool::Reversal(ptr, sizeof(int32_t));
+				    len_str = *((int32_t*)ptr);
+				}else {//大端小端不匹配的时候进行翻转
+				    len_str = *((int32_t*)ptr);
+				}
+				if ( (len_str+2+sizeof(int32_t)) !=  all_len) {
+				    err_info = "结构MCustom_String反序列化失败, 长度错误";
+				    std::cout << err_info << endl;return false;
+				}
+				ptr = ptr + 5;
+				string newStr(ptr, len_str);
+				str = newStr;
+				return true;
+			}
+			catch (const char* c)
+			{
+				err_info = c;
+				cout << err_info << endl;
+				return false;
+			}
+			catch (...)
+			{
+				err_info = "MCustom_String解析异常";
+				return false;
+			}
+		}
+	};
+
+
+	//********example********//
+	//被引用的结构需要写在引用他的结构前面,两个结构体不可以相互引用
+	//被temp_demo_a引用的变量
+	struct temp_demo_b{
+		int16_t f;//
+		MCustom_String c;//
+
+		/*网络数据*/
+		char* data_buffer;
+		vector<char*> buf;
+		vector<char*> delbuf;
+
+		temp_demo_b(){
+			f = 0;
+			c.str = "test";
+			data_buffer = 0;
+		}
+
+		~temp_demo_b(){
+			Delete_Send_Buffer();
+		}
+
+		/*删除网络数据*/
+		void Delete_Send_Buffer() {
+			if (data_buffer != 0) {
+				delete[] data_buffer;
+				data_buffer = 0;
+			}
+			buf.clear();
+			delbuf.clear();
+		}
+
+		/**
+		根据结构体获得网络数据,结构-》协议
+		将结构进行序列化
+		序列化的结果不可以直接发送，没有相应的消息头和协议号
+		@char* 返回转换成的数据
+		@size 数据的长度(总长度)
+		*/
+		char* Serialize(int32_t& size) {
+			try{
+				Delete_Send_Buffer();
+				size = 0;
+				get_val_default<int16_t>(buf, delbuf, f, size);
+				get_self_val_default<MCustom_String>(buf, delbuf, c, size);
+				data_buffer = ProtoTool::get_finish(buf, delbuf, size);
+				return data_buffer;
+			}catch (const char* c){
+				cout << c << endl;
+			}
+			catch (...){}
+		}
+
+		/**
+		根据char数组获取对应的数据,协议-》结构
+		将结构进行反序列化,并更新结构体的值
+		@成功返回true
+		*/
+		bool Deserialize(char* p,bool need_rev,int32_t all_len,string& err_info) {
+			try {
+				int32_t err_code;
+				int32_t allsize;
+				char* buf = ProtoTool::update_init(p, err_code, allsize,need_rev);//获得数据体
+				if ((allsize + 2 + sizeof(int32_t)) != all_len) {
+					err_info = "结构temp_demo_b解析错误，长度不一致";
+					cout << err_info << endl;return false;
+				}
+				if (err_code!=0) {std::cout << "结构temp_demo_b反序列化失败" << endl;return false; }//数据发生错误
+				int32_t head = sizeof(int32_t);
+				char* ptr = buf;
+				ptr = val_pt_update<int16_t>(ptr, f, head, allsize,need_rev,err_code,err_info);
+				ptr = val_self_pt_update<MCustom_String>(ptr, c, head, allsize,need_rev,err_code,err_info);
+				if (allsize!=0) {
+					err_info = "结构temp_demo_b解析错误，长度不一致, 最终长度 != 0";
+					cout << err_info<< endl; return false;
+				}
+				delete[] buf;
+				return true;
+			}catch (const int32_t err){
+				cout << "错误码："<< err << endl;
+				return false;
+			}
+			catch (...){return false;}
+		}
+	};
+
+	//结构体支持的定义格式
+	struct temp_demo_a{
+		temp_demo_b a;//自定义单变量的定义
+		vector<temp_demo_b> b;//自定义结构列表的定义
+		MCustom_String c;//字符串定义
+		vector<MCustom_String> d;//字符串列表定义
+		int16_t e;//lua协议需要大于=0的数
+		int16_t f;//lua协议需要大于=0的数
+		int32_t g;//lua协议需要大于=0的数
+		bool h;//lua协议需要大于=0的数
+		int64_t i;//lua协议需要大于=0的数
+		vector<int64_t> l;//通用列表的定义
+
+		/*网络数据*/
+		char* data_buffer;
+		vector<char*> buf;
+		vector<char*> delbuf;
+
+		temp_demo_a(){
+			c.str = "test";
+			e = 0;
+			f = 0;
+			g = 0;
+			h = true;
+			i = 0;
+			data_buffer = 0;
+		}
+
+		~temp_demo_a(){
+			Delete_Send_Buffer();
+		}
+
+		/*删除网络数据*/
+		void Delete_Send_Buffer() {
+			if (data_buffer != 0) {
+				delete[] data_buffer;
+				data_buffer = 0;
+			}
+			buf.clear();
+			delbuf.clear();
+		}
+
+		/**
+		根据结构体获得网络数据,结构-》协议
+		将结构进行序列化
+		序列化的结果不可以直接发送，没有相应的消息头和协议号
+		@char* 返回转换成的数据
+		@size 数据的长度(总长度)
+		*/
+		char* Serialize(int32_t& size) {
+			try{
+				Delete_Send_Buffer();
+				size = 0;
+				get_self_val_default<temp_demo_b>(buf, delbuf, a, size);
+				get_self_val_list_default<temp_demo_b>(buf, delbuf, b, size);
+				get_self_val_default<MCustom_String>(buf, delbuf, c, size);
+				get_self_val_list_default<MCustom_String>(buf, delbuf, d, size);
+				get_val_default<int16_t>(buf, delbuf, e, size);
+				get_val_default<int16_t>(buf, delbuf, f, size);
+				get_val_default<int32_t>(buf, delbuf, g, size);
+				get_val_default<bool>(buf, delbuf, h, size);
+				get_val_default<int64_t>(buf, delbuf, i, size);
+				get_val_list_default<int64_t>(buf, delbuf, l, size);
+				data_buffer = ProtoTool::get_finish(buf, delbuf, size);
+				return data_buffer;
+			}catch (const char* c){
+				cout << c << endl;
+			}
+			catch (...){}
+		}
+
+		/**
+		根据char数组获取对应的数据,协议-》结构
+		将结构进行反序列化,并更新结构体的值
+		@成功返回true
+		*/
+		bool Deserialize(char* p,bool need_rev,int32_t all_len,string& err_info) {
+			try {
+				int32_t err_code;
+				int32_t allsize;
+				char* buf = ProtoTool::update_init(p, err_code, allsize,need_rev);//获得数据体
+				if ((allsize + 2 + sizeof(int32_t)) != all_len) {
+					err_info = "结构temp_demo_a解析错误，长度不一致";
+					cout << err_info << endl;return false;
+				}
+				if (err_code!=0) {std::cout << "结构temp_demo_a反序列化失败" << endl;return false; }//数据发生错误
+				int32_t head = sizeof(int32_t);
+				char* ptr = buf;
+				ptr = val_self_pt_update<temp_demo_b>(ptr, a, head, allsize,need_rev,err_code,err_info);
+				ptr = val_self_list_pt_update<temp_demo_b>(ptr, b, head, allsize,need_rev,err_code,err_info);
+				ptr = val_self_pt_update<MCustom_String>(ptr, c, head, allsize,need_rev,err_code,err_info);
+				ptr = val_self_list_pt_update<MCustom_String>(ptr, d, head, allsize,need_rev,err_code,err_info);
+				ptr = val_pt_update<int16_t>(ptr, e, head, allsize,need_rev,err_code,err_info);
+				ptr = val_pt_update<int16_t>(ptr, f, head, allsize,need_rev,err_code,err_info);
+				ptr = val_pt_update<int32_t>(ptr, g, head, allsize,need_rev,err_code,err_info);
+				ptr = val_pt_update<bool>(ptr, h, head, allsize,need_rev,err_code,err_info);
+				ptr = val_pt_update<int64_t>(ptr, i, head, allsize,need_rev,err_code,err_info);
+				ptr = val_list_pt_update<int64_t>(ptr, l, head, allsize,need_rev,err_code,err_info);
+				if (allsize!=0) {
+					err_info = "结构temp_demo_a解析错误，长度不一致, 最终长度 != 0";
+					cout << err_info<< endl; return false;
+				}
+				delete[] buf;
+				return true;
+			}catch (const int32_t err){
+				cout << "错误码："<< err << endl;
+				return false;
+			}
+			catch (...){return false;}
+		}
+	};
+
+	//心跳包
+	struct heart_data{
+		int16_t res;
+
+		/*网络数据*/
+		char* data_buffer;
+		vector<char*> buf;
+		vector<char*> delbuf;
+
+		heart_data(){
+			res = 0;
+			data_buffer = 0;
+		}
+
+		~heart_data(){
+			Delete_Send_Buffer();
+		}
+
+		/*删除网络数据*/
+		void Delete_Send_Buffer() {
+			if (data_buffer != 0) {
+				delete[] data_buffer;
+				data_buffer = 0;
+			}
+			buf.clear();
+			delbuf.clear();
+		}
+
+		/**
+		根据结构体获得网络数据,结构-》协议
+		将结构进行序列化
+		序列化的结果不可以直接发送，没有相应的消息头和协议号
+		@char* 返回转换成的数据
+		@size 数据的长度(总长度)
+		*/
+		char* Serialize(int32_t& size) {
+			try{
+				Delete_Send_Buffer();
+				size = 0;
+				get_val_default<int16_t>(buf, delbuf, res, size);
+				data_buffer = ProtoTool::get_finish(buf, delbuf, size);
+				return data_buffer;
+			}catch (const char* c){
+				cout << c << endl;
+			}
+			catch (...){}
+		}
+
+		/**
+		根据char数组获取对应的数据,协议-》结构
+		将结构进行反序列化,并更新结构体的值
+		@成功返回true
+		*/
+		bool Deserialize(char* p,bool need_rev,int32_t all_len,string& err_info) {
+			try {
+				int32_t err_code;
+				int32_t allsize;
+				char* buf = ProtoTool::update_init(p, err_code, allsize,need_rev);//获得数据体
+				if ((allsize + 2 + sizeof(int32_t)) != all_len) {
+					err_info = "结构heart_data解析错误，长度不一致";
+					cout << err_info << endl;return false;
+				}
+				if (err_code!=0) {std::cout << "结构heart_data反序列化失败" << endl;return false; }//数据发生错误
+				int32_t head = sizeof(int32_t);
+				char* ptr = buf;
+				ptr = val_pt_update<int16_t>(ptr, res, head, allsize,need_rev,err_code,err_info);
+				if (allsize!=0) {
+					err_info = "结构heart_data解析错误，长度不一致, 最终长度 != 0";
+					cout << err_info<< endl; return false;
+				}
+				delete[] buf;
+				return true;
+			}catch (const int32_t err){
+				cout << "错误码："<< err << endl;
+				return false;
+			}
+			catch (...){return false;}
+		}
+	};
+}
+

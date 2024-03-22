@@ -1,0 +1,212 @@
+
+#include "stdafx.h"
+#include "ProtoNetClient.h"
+
+string ProtoNetClient::url = "127.0.0.1";
+int32_t ProtoNetClient::port = 12000;
+
+void ProtoNetClient::Start() {
+	timer = new boost::asio::deadline_timer(client);
+	timer_ping = new boost::asio::deadline_timer(client);
+	io_service::work* work_ptr = new io_service::work(client);//使service_dispose_client始终在运行
+	boost::system::error_code err;
+	ip::tcp::endpoint point(ip::address::from_string(ProtoNetClient::url, err), ProtoNetClient::port);
+	if (err) {
+		std::cout << "服务器连接错误" << endl;
+		timer_reset_connect = new boost::asio::deadline_timer(client);
+		ProtoNetClient::ResetConnect(this);
+		return;
+	}
+	else {
+		socket = socket_ptr(new ip::tcp::socket(client));
+		socket->async_connect(point, boost::bind(&ProtoNetClient::StartCallBack, this, _1));
+	}
+	client.run();//客户端只需要跑一个线程
+}
+
+//重新连接
+void ProtoNetClient::ResetConnect(ProtoNetClient* io) {
+	boost::system::error_code err;
+	ip::tcp::endpoint point(ip::address::from_string(ProtoNetClient::url, err), ProtoNetClient::port);
+	if (err) {
+		std::cout << "服务器连接错误" << endl;
+		io->timer_reset_connect->expires_from_now(boost::posix_time::milliseconds(1000));
+		io->timer_reset_connect->async_wait(boost::bind(&ProtoNetClient::ResetConnect, io));
+		return;
+	}
+	else {
+		io->socket = socket_ptr(new ip::tcp::socket(io->client));
+		io->socket->async_connect(point, boost::bind(&ProtoNetClient::StartCallBack, io, _1));
+	}
+}
+
+void ProtoNetClient::StartCallBack(ProtoNetClient* io, const boost::system::error_code& err) {
+	if (err) {
+		ProtoNetClient::ResetConnect(io);
+		return;
+	}
+	else {
+		std::cout << "连接到服务器" << endl;
+		//发送登录请求
+		ProtoTool pt;
+		account_login send_d;
+		send_d.username.str = io->username;
+		send_d.password.str = io->password;
+		int32_t size;
+		char* p_login = pt.Serialize(send_d, size, agreement_login);
+		ProtoNetClient::Send_Static(io, p_login, size);//立刻发送
+		//
+		ProtoNetClient:Ping(io);
+		//开始接受数据
+		char* p = io->GetDisposeReadDataSave();
+		io->socket->async_read_some(buffer(p, client_buf_max),boost::bind(&ProtoNetClient::On_Read, io,p,_1,_2));
+	}
+}
+
+void ProtoNetClient::On_Read(ProtoNetClient* io, char* p, const boost::system::error_code& err, size_t s){
+	if (err) {
+		io->PutBackDisposeReadDataSave(p);
+		ProtoNetClient::ResetConnect(io);
+		return;
+	}
+	if (s>client_buf_max) {
+		s = client_buf_max;
+	}
+	//
+	if (s == 0) {
+		io->socket->async_read_some(buffer(p, client_buf_max), boost::bind(&ProtoNetClient::On_Read, io,p, _1, _2));
+		return;
+	}
+	//
+	bool res = false;
+	vector<Proto::Proto_Package_Data> resoult;//由于存储数据切分后的结果
+	Proto::ProtoTool pt;//协议数据切分工具
+	string err_info;
+	int32_t err_code= pt.Split_The_Parcel(p, s, resoult, err_info);
+	vector<Proto::Proto_Package_Data>::iterator it = resoult.begin();
+	for (; it != resoult.end(); ++it) {
+	    err_info = "";
+	    res = true;
+		switch (it->agreement)
+		{
+		case Proto::err://错误码
+		{
+			Proto::err_data get_d = it->Deserialize<Proto::err_data>(res,err_info);
+			if (res) {
+				switch (get_d.err_code)
+				{
+				case err_comment:
+				{
+					std::cout << "通用错误码" << endl;
+				}
+				break;
+				case err_frequent_request:
+				{
+					std::cout << "频繁请求" << endl;
+				}
+				break;
+				case err_login_err_timeout:
+				{
+					std::cout << "超时未登录" << endl;
+				}
+				break;
+				case err_login_err_username:
+				{
+					std::cout << "登录账号错误" << endl;
+				}
+				break;
+				case err_login_err_password:
+				{
+					std::cout << "登录密码错误" << endl;
+				}
+				break;
+				case err_login_err_same_ac:
+				{
+					std::cout << "同一个账号重复登录" << endl;
+				}
+				break;
+				default:
+					break;
+				}
+			}
+		}
+		break;
+		case Proto::agreement_login_c://账号登录请求反馈
+		{
+			Proto::account_login_c get_d = it->Deserialize<Proto::account_login_c>(res,err_info);
+			if (res) {
+				if (get_d.res==1) {
+					std::cout <<"登录成功"<< endl;
+				}
+				else if (get_d.res == 0) {
+					std::cout << "登录失败" << endl;
+				}
+			}
+		}
+		break;
+		default:
+			break;
+		}
+	    if (!res) {
+		    std::cout << "反序列化数据失败:"<< err_info << endl;
+	    }
+	}
+	//
+	if (err_code!=0) {
+	    std::cout << "数据分割失败:" << err_info << endl;
+	}
+	io->PutBackDisposeReadDataSave(p);
+}
+
+char* ProtoNetClient::GetDisposeReadDataSave() {
+	vector<char*>::iterator it = disposeReadDatas.begin();
+
+	if (it != disposeReadDatas.end()) {
+		char* read_data = *it;
+		disposeReadDatas.erase(it);
+		return read_data;
+	}
+	//
+	{
+		char* p = new char[client_buf_max + 1];
+		return p;
+	}
+}
+
+void ProtoNetClient::PutBackDisposeReadDataSave(char* p) {
+	disposeReadDatas.push_back(p);
+}
+
+//延迟发送
+void ProtoNetClient::SendMillisec_Static(ProtoNetClient* io, char* p, int size, int waitMillisec) {
+	io->timer->expires_from_now(boost::posix_time::milliseconds(waitMillisec));
+	io->timer->async_wait(boost::bind(&ProtoNetClient::Send_Static, io,p, size));
+}
+
+//立刻发送
+void ProtoNetClient::Send_Static(ProtoNetClient* io, char* p, int size) {
+	io->socket->async_write_some(buffer(p, size),boost::bind(&ProtoNetClient::Send_CallBack, io,_1));
+}
+
+void ProtoNetClient::Send_CallBack(ProtoNetClient* io, const boost::system::error_code& err) {
+	if (!io->socket->is_open()) {
+		ResetConnect(io);
+		return;
+	}
+}
+
+//向服务端ping
+void ProtoNetClient::Ping(ProtoNetClient* io) {
+	if (!io->socket->is_open()) {
+		ResetConnect(io);
+		return;
+	}
+	ProtoTool pt;
+	ping_data send_d;
+	int32_t size;
+	char* p = pt.Serialize<ping_data>(send_d, size, ping);
+	ProtoNetClient::Send_Static(io,p,size);
+	//
+	io->timer_ping->expires_from_now(boost::posix_time::seconds(1));
+	io->timer_ping->async_wait(boost::bind(&ProtoNetClient::Ping, io));
+}

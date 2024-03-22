@@ -1,0 +1,260 @@
+
+require("proto_tool")
+--关键属性
+--ProtoTool::Endian //当前强制使用的端排序模式 (可与ProtoTool::SysEndian配合使用系统默认排序)
+--ProtoTool.Serialize //将传入的协议结构序列化成网络传输的数据 (端序(2字节)|数据长度(4字节)|协议号(4字节)|数据字节)
+--ProtoTool.Split_The_Parcel //将接收到的网络数据切割成若干Proto_Package_Data
+--Proto_Package_Data.Deserialize() //将切割完的网络数据反序列化成对象
+--通用数据序列化规则(int16_t,int32_t,int64_t,short,bool)->('~'+数据长度(4字节)+'~'+|+正负标记(2字节)+|+数据长度)
+--数组规则('^'+数据长度(4字节)+'^'+|+数据)
+--数组规则('^'+数据长度(4字节)+'^'+|+数据)
+
+proto_enum = {
+	Heart=1;--//心跳
+	Debug_Log=2;--//log日志
+	Debug_LogError=3;--//log日志
+	Debug_LogWarning=4;--//log日志
+}
+
+-------------------------------------------------结构体(结构中的数字型的变量只可以是大于等于0的数，变量不可以是小数类,同时服务器页不应该传输小于0或者小数)---------------------------------------------------------
+MCustom_String={
+	str="";
+}
+
+MCustom_String.__index=MCustom_String;
+
+--获得MCustom_String实例
+function MCustom_String.new()
+	local o={};
+	setmetatable(o,MCustom_String);
+	return o;
+end
+
+--序列化的结果不可以直接传送，需要添加头和协议号 返回数据总长度（不包含头）和 数据
+function MCustom_String.Serialize(tabel_target)
+	local size = 0;
+	local str_res_ = "";
+	local s_ = 0;
+	local str_ = "";
+	--序列化普通变量 单
+	s_,str_= Serialize_Normal(tabel_target.str,5);
+	size=size+s_;
+	str_res_=str_res_..str_;
+	--
+	return size,str_res_
+end
+
+function MCustom_String.Deserialize(str,tabel_target,target_endian)
+    local size=0;
+	local c_size=0;
+	local c_str=str;
+	--反序列化普通变量 单
+	c_size,tabel_target.str,c_str = Deserialize_Normal(c_str , 5,target_endian);
+	size=size+c_size;
+	--
+	return size,c_str;
+end
+--******************************************************************************--
+--//********example********//
+--//被引用的结构需要写在引用他的结构前面,两个结构体不可以相互引用
+--//被temp_demo_a引用的变量
+temp_demo_b={
+	f;--type类型(Int16)--//
+	c;--type类型(string)--//
+}
+
+temp_demo_b.__index=temp_demo_b;
+
+--获得temp_demo_b实例
+function temp_demo_b.new()
+	local o={};
+	setmetatable(o,temp_demo_b);
+	o.f = 0;
+	o.c = "test";
+	return o;
+end
+
+--序列化的结果不可以直接传送，需要添加头和协议号 返回数据总长度（不包含头）和 数据
+function temp_demo_b.Serialize(tabel_target_)
+	local size_ = 0;
+	local str_res_ = "";
+	local s_ = 0;
+	local str_ = "";
+	s_,str_ = Serialize_Normal(tabel_target_.f,1);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.c,5);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	--
+	local size_buf="";
+	size_buf=numToAscii(126)..int32ToBufStr(size_,Endian)..numToAscii(126);--根据端序进行大小端排序
+	str_res_=size_buf..str_res_;
+	size_=size_+6;
+	return size_,str_res_
+end
+
+--反序列化  target_endian:目标端序
+function temp_demo_b.Deserialize(str_s_,tabel_target_,target_endian)
+	local all_size_=0;
+	local c_size_=0;
+	local c_str_c=string.sub(str_s_,7,string.len(str_s_));
+	c_size_,tabel_target_.f,c_str_c = Deserialize_Normal(c_str_c , 1,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.c,c_str_c = Deserialize_Normal(c_str_c , 5,target_endian);
+	all_size_=all_size_+c_size_;
+	--
+	return all_size_,c_str_c;
+end
+
+--******************************************************************************--
+--//结构体支持的定义格式
+temp_demo_a={
+	a;--type类型(temp_demo_b)--//自定义单变量的定义
+	b;--type类型(temp_demo_b)--//自定义结构列表的定义
+	c;--type类型(string)--//字符串定义
+	d;--type类型(string)--//字符串列表定义
+	e;--type类型(Int16)--//lua协议需要大于=0的数
+	f;--type类型(Int16)--//lua协议需要大于=0的数
+	g;--type类型(Int32)--//lua协议需要大于=0的数
+	h;--type类型(bool)--//lua协议需要大于=0的数
+	i;--type类型(Int64)--//lua协议需要大于=0的数
+	l;--type类型(Int64)--//通用列表的定义
+}
+
+temp_demo_a.__index=temp_demo_a;
+
+--获得temp_demo_a实例
+function temp_demo_a.new()
+	local o={};
+	setmetatable(o,temp_demo_a);
+	o.a =  temp_demo_b.new();
+	o.b = {};
+	o.c = "test";
+	o.d = {};
+	o.e = 0;
+	o.f = 0;
+	o.g = 0;
+	o.h = true;
+	o.i = 0;
+	o.l = {};
+	return o;
+end
+
+--序列化的结果不可以直接传送，需要添加头和协议号 返回数据总长度（不包含头）和 数据
+function temp_demo_a.Serialize(tabel_target_)
+	local size_ = 0;
+	local str_res_ = "";
+	local s_ = 0;
+	local str_ = "";
+	s_,str_ = Serialize_Self(tabel_target_.a);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Self_list(tabel_target_.b);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.c,5);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal_List(tabel_target_.d,5);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.e,1);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.f,1);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.g,2);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.h,4);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal(tabel_target_.i,3);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	s_,str_ = Serialize_Normal_List(tabel_target_.l,3);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	--
+	local size_buf="";
+	size_buf=numToAscii(126)..int32ToBufStr(size_,Endian)..numToAscii(126);--根据端序进行大小端排序
+	str_res_=size_buf..str_res_;
+	size_=size_+6;
+	return size_,str_res_
+end
+
+--反序列化  target_endian:目标端序
+function temp_demo_a.Deserialize(str_s_,tabel_target_,target_endian)
+	local all_size_=0;
+	local c_size_=0;
+	local c_str_c=string.sub(str_s_,7,string.len(str_s_));
+	c_size_,c_str_c=Deserialize_Self(c_str_c,tabel_target_.a,target_endian);
+	all_size_=all_size_+c_size_;
+	tabel_target_.b,c_size_,c_str_c=Deserialize_Self_List(c_str_c,temp_demo_b,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.c,c_str_c = Deserialize_Normal(c_str_c , 5,target_endian);
+	all_size_=all_size_+c_size_;
+	tabel_target_.d,c_size_,c_str_c=Deserialize_Normal_List(c_str_c,5,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.e,c_str_c = Deserialize_Normal(c_str_c , 1,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.f,c_str_c = Deserialize_Normal(c_str_c , 1,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.g,c_str_c = Deserialize_Normal(c_str_c , 2,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.h,c_str_c = Deserialize_Normal(c_str_c , 4,target_endian);
+	all_size_=all_size_+c_size_;
+	c_size_,tabel_target_.i,c_str_c = Deserialize_Normal(c_str_c , 3,target_endian);
+	all_size_=all_size_+c_size_;
+	tabel_target_.l,c_size_,c_str_c=Deserialize_Normal_List(c_str_c,3,target_endian);
+	all_size_=all_size_+c_size_;
+	--
+	return all_size_,c_str_c;
+end
+
+--******************************************************************************--
+--//心跳包
+heart_data={
+	res;--type类型(Int16)--
+}
+
+heart_data.__index=heart_data;
+
+--获得heart_data实例
+function heart_data.new()
+	local o={};
+	setmetatable(o,heart_data);
+	o.res = 0;
+	return o;
+end
+
+--序列化的结果不可以直接传送，需要添加头和协议号 返回数据总长度（不包含头）和 数据
+function heart_data.Serialize(tabel_target_)
+	local size_ = 0;
+	local str_res_ = "";
+	local s_ = 0;
+	local str_ = "";
+	s_,str_ = Serialize_Normal(tabel_target_.res,1);
+	size_ = size_+s_;
+	str_res_ = str_res_..str_;
+	--
+	local size_buf="";
+	size_buf=numToAscii(126)..int32ToBufStr(size_,Endian)..numToAscii(126);--根据端序进行大小端排序
+	str_res_=size_buf..str_res_;
+	size_=size_+6;
+	return size_,str_res_
+end
+
+--反序列化  target_endian:目标端序
+function heart_data.Deserialize(str_s_,tabel_target_,target_endian)
+	local all_size_=0;
+	local c_size_=0;
+	local c_str_c=string.sub(str_s_,7,string.len(str_s_));
+	c_size_,tabel_target_.res,c_str_c = Deserialize_Normal(c_str_c , 1,target_endian);
+	all_size_=all_size_+c_size_;
+	--
+	return all_size_,c_str_c;
+end
+

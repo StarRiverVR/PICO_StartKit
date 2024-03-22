@@ -1,0 +1,21 @@
+
+#pragma once
+#include "stdafx.h" 
+#include "proto_tool.h" 
+
+namespace Proto {
+	int16_t ProtoTool::SysEndian =-1;//1:小端模式 2:大端模式
+	int16_t ProtoTool::Endian=1;
+    void ProtoTool::InitEndian() {
+		if (ProtoTool::SysEndian != 1 && ProtoTool::SysEndian != 2) {
+			int16_t check_num = 1;
+			char* p = (char*)&check_num;
+			if (*p == 1) {
+				ProtoTool::SysEndian = 1;
+			}
+			else {
+				ProtoTool::SysEndian = 2;
+			}
+		}
+	}
+}
